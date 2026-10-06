@@ -1,0 +1,58 @@
+trigger:
+  - main
+
+pool:
+  name: Local-Windows-Pool
+
+steps:
+
+  - task: Maven@4
+    displayName: 'Build Java application'
+    inputs:
+      mavenPomFile: 'pom.xml'
+      goals: 'clean package'
+      publishJUnitResults: false
+      javaHomeOption: 'JDKVersion'
+      jdkVersionOption: '1.21'
+      jdkArchitectureOption: 'x64'
+
+    
+
+  - task: PowerShell@2
+    displayName: 'Deploy application'
+    inputs:
+      targetType: 'inline'
+      script: |
+
+        $deployPath = "C:\apps\java-devops-demo"
+
+        Write-Host "Creating deployment directory..."
+
+        if (!(Test-Path $deployPath)) {
+            New-Item -ItemType Directory -Path $deployPath
+        }
+
+        Write-Host "Stopping existing application..."
+
+        Get-CimInstance Win32_Process |
+            Where-Object {
+                $_.CommandLine -like "*java-devops-demo*"
+            } |
+            ForEach-Object {
+                Stop-Process -Id $_.ProcessId -Force
+            }
+
+        Write-Host "Copying new JAR..."
+
+        Copy-Item `
+            "$(Build.SourcesDirectory)\target\java-devops-demo-1.0.0.jar" `
+            "$deployPath\java-devops-demo.jar" `
+            -Force
+
+        Write-Host "Starting application..."
+
+        Start-Process `
+            "java" `
+            "-jar $deployPath\java-devops-demo.jar"
+
+        Write-Host "Deployment completed."
