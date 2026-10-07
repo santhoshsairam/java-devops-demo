@@ -4,55 +4,109 @@ trigger:
 pool:
   name: Local-Windows-Pool
 
-steps:
+stages:
 
-  - task: Maven@4
-    displayName: 'Build Java application'
-    inputs:
-      mavenPomFile: 'pom.xml'
-      goals: 'clean package'
-      publishJUnitResults: false
-      javaHomeOption: 'JDKVersion'
-      jdkVersionOption: '1.21'
-      jdkArchitectureOption: 'x64'
+# =========================
+# CI STAGE
+# =========================
 
-    
+- stage: Build
+  displayName: 'Build and Publish'
 
-  - task: PowerShell@2
-    displayName: 'Deploy application'
-    inputs:
-      targetType: 'inline'
-      script: |
+  jobs:
+  - job: BuildJava
+    displayName: 'Build Java Application'
 
-        $deployPath = "C:\apps\java-devops-demo"
+    steps:
 
-        Write-Host "Creating deployment directory..."
+    - task: Maven@4
+      displayName: 'Build Java Application'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'clean package'
+        publishJUnitResults: false
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.21'
+        jdkArchitectureOption: 'x64'
 
-        if (!(Test-Path $deployPath)) {
-            New-Item -ItemType Directory -Path $deployPath
-        }
+    - task: PowerShell@2
+      displayName: 'Verify JAR'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Checking generated JAR..."
 
-        Write-Host "Stopping existing application..."
+          Get-ChildItem "$(Build.SourcesDirectory)\target"
 
-        Get-CimInstance Win32_Process |
-            Where-Object {
-                $_.CommandLine -like "*java-devops-demo*"
-            } |
-            ForEach-Object {
-                Stop-Process -Id $_.ProcessId -Force
-            }
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Application Artifact'
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)\target\java-devops-demo-1.0.0.jar'
+        artifact: 'java-app'
 
-        Write-Host "Copying new JAR..."
 
-        Copy-Item `
-            "$(Build.SourcesDirectory)\target\java-devops-demo-1.0.0.jar" `
-            "$deployPath\java-devops-demo.jar" `
-            -Force
+# =========================
+# CD STAGE
+# =========================
 
-        Write-Host "Starting application..."
+- stage: Deploy
+  displayName: 'Deploy to Windows'
+  dependsOn: Build
 
-        Start-Process `
-            "java" `
-            "-jar $deployPath\java-devops-demo.jar"
+  jobs:
+  - job: DeployJava
+    displayName: 'Deploy Java Application'
 
-        Write-Host "Deployment completed."
+    steps:
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Application Artifact'
+      inputs:
+        artifact: 'java-app'
+        path: '$(Pipeline.Workspace)\java-app'
+
+    - task: PowerShell@2
+      displayName: 'Deploy Application'
+      inputs:
+        targetType: 'inline'
+        script: |
+
+          $deployPath = "C:\apps\java-devops-demo"
+          $artifactPath = "$(Pipeline.Workspace)\java-app\java-devops-demo-1.0.0.jar"
+
+          Write-Host "Deployment directory: $deployPath"
+          Write-Host "Artifact: $artifactPath"
+
+          # Create deployment directory
+          if (!(Test-Path $deployPath)) {
+              New-Item -ItemType Directory -Path $deployPath
+          }
+
+          # Stop existing application
+          Write-Host "Stopping existing application..."
+
+          Get-CimInstance Win32_Process |
+              Where-Object {
+                  $_.CommandLine -like "*java-devops-demo.jar*"
+              } |
+              ForEach-Object {
+                  Write-Host "Stopping process $($_.ProcessId)"
+                  Stop-Process -Id $_.ProcessId -Force
+              }
+
+          # Copy artifact
+          Write-Host "Copying artifact..."
+
+          Copy-Item `
+              $artifactPath `
+              "$deployPath\java-devops-demo.jar" `
+              -Force
+
+          # Start application
+          Write-Host "Starting application..."
+
+          Start-Process `
+              "java" `
+              "-jar $deployPath\java-devops-demo.jar"
+
+          Write-Host "Deployment completed successfully."
