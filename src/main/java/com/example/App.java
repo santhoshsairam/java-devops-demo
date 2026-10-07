@@ -32,6 +32,7 @@ public class App {
                 Application: DevOps Demo
                 Environment: Local Windows
                 Deployment: Azure DevOps
+                Version : 2
                 """;
 
         exchange.sendResponseHeaders(200, response.length());
