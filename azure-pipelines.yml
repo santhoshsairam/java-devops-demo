@@ -102,11 +102,37 @@ stages:
               "$deployPath\java-devops-demo.jar" `
               -Force
 
-          # Start application
-          Write-Host "Starting application..."
+         Write-Host "Starting Java application..."
 
+          $javaPath = (Get-Command java).Source
+          
+          Write-Host "Java executable: $javaPath"
+          
+          $stdoutLog = "$deployPath\app-stdout.log"
+          $stderrLog = "$deployPath\app-stderr.log"
+          
           Start-Process `
-              "java" `
-              "-jar $deployPath\java-devops-demo.jar"
-
-          Write-Host "Deployment completed successfully."
+              -FilePath $javaPath `
+              -ArgumentList "-jar `"$deployPath\java-devops-demo.jar`"" `
+              -WorkingDirectory $deployPath `
+              -RedirectStandardOutput $stdoutLog `
+              -RedirectStandardError $stderrLog `
+              -WindowStyle Hidden
+          
+          Start-Sleep -Seconds 5
+          
+          Write-Host "Checking Java process..."
+          
+          Get-Process java -ErrorAction SilentlyContinue
+          
+          Write-Host "===== STDOUT ====="
+          
+          if (Test-Path $stdoutLog) {
+              Get-Content $stdoutLog
+          }
+          
+          Write-Host "===== STDERR ====="
+          
+          if (Test-Path $stderrLog) {
+              Get-Content $stderrLog
+          }
