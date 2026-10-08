@@ -102,7 +102,7 @@ stages:
               "$deployPath\java-devops-demo.jar" `
               -Force
 
-         Write-Host "Starting Java application..."
+          Write-Host "Starting Java application..."
 
           $javaPath = (Get-Command java).Source
           
