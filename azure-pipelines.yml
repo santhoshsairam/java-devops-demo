@@ -102,50 +102,26 @@ stages:
               "$deployPath\java-devops-demo.jar" `
               -Force
 
-          $jarPath = "$deployPath\java-devops-demo.jar"
-          
-          $javaPath = (Get-Command java.exe -ErrorAction Stop).Source
-          
-          Write-Host "Java executable: $javaPath"
-          Write-Host "Current user:"
-          whoami
-          
-          Write-Host "Java version:"
-          & $javaPath -version
-          
-          Write-Host "Starting Java application..."
-          
-          $stdoutLog = "$deployPath\app-stdout.log"
-          $stderrLog = "$deployPath\app-stderr.log"
-          
-          Remove-Item $stdoutLog, $stderrLog -Force -ErrorAction SilentlyContinue
-          
-          $process = Start-Process `
-              -FilePath $javaPath `
-              -ArgumentList "-jar `"$jarPath`"" `
-              -WorkingDirectory $deployPath `
-              -RedirectStandardOutput $stdoutLog `
-              -RedirectStandardError $stderrLog `
+          # Start application
+          Write-Host "Starting application..."
+
+          $logFile = "$deployPath\app.log"
+
+          $proc = Start-Process `
+              -FilePath "java" `
+              -ArgumentList "-jar `"$deployPath\java-devops-demo.jar`"" `
+              -WindowStyle Hidden `
+              -RedirectStandardOutput $logFile `
+              -RedirectStandardError "$deployPath\app-error.log" `
               -PassThru
-          
-          Write-Host "Started process ID: $($process.Id)"
-          
-          Start-Sleep -Seconds 3
-          $process.Refresh()
-          
-          if ($process.HasExited) {
-              Write-Host "Java process exited."
-              Write-Host "Exit code: $($process.ExitCode)"
+
+          Write-Host "Started process PID: $($proc.Id)"
+
+          # Brief pause then confirm the process is still alive
+          Start-Sleep -Seconds 5
+          if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
+              Write-Host "Application is running (PID $($proc.Id)). Deployment completed successfully."
           } else {
-              Write-Host "Java process is still running."
+              Write-Error "Application process exited immediately. Check $deployPath\app-error.log for details."
+              exit 1
           }
-          
-          Write-Host "===== STDOUT ====="
-          Get-Content $stdoutLog -ErrorAction SilentlyContinue
-          
-          Write-Host "===== STDERR ====="
-          Get-Content $stderrLog -ErrorAction SilentlyContinue
-          
-          Write-Host "===== PORT 8080 ====="
-          Get-NetTCPConnection -LocalPort 8080 -State Listen `
-              -ErrorAction SilentlyContinue
