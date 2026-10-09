@@ -102,37 +102,50 @@ stages:
               "$deployPath\java-devops-demo.jar" `
               -Force
 
-          Write-Host "Starting Java application..."
-
-          $javaPath = (Get-Command java).Source
+          $jarPath = "$deployPath\java-devops-demo.jar"
+          
+          $javaPath = (Get-Command java.exe -ErrorAction Stop).Source
           
           Write-Host "Java executable: $javaPath"
+          Write-Host "Current user:"
+          whoami
+          
+          Write-Host "Java version:"
+          & $javaPath -version
+          
+          Write-Host "Starting Java application..."
           
           $stdoutLog = "$deployPath\app-stdout.log"
           $stderrLog = "$deployPath\app-stderr.log"
           
-          Start-Process `
+          Remove-Item $stdoutLog, $stderrLog -Force -ErrorAction SilentlyContinue
+          
+          $process = Start-Process `
               -FilePath $javaPath `
-              -ArgumentList "-jar `"$deployPath\java-devops-demo.jar`"" `
+              -ArgumentList "-jar `"$jarPath`"" `
               -WorkingDirectory $deployPath `
               -RedirectStandardOutput $stdoutLog `
               -RedirectStandardError $stderrLog `
-              -WindowStyle Hidden
+              -PassThru
           
-          Start-Sleep -Seconds 5
+          Write-Host "Started process ID: $($process.Id)"
           
-          Write-Host "Checking Java process..."
+          Start-Sleep -Seconds 3
+          $process.Refresh()
           
-          Get-Process java -ErrorAction SilentlyContinue
+          if ($process.HasExited) {
+              Write-Host "Java process exited."
+              Write-Host "Exit code: $($process.ExitCode)"
+          } else {
+              Write-Host "Java process is still running."
+          }
           
           Write-Host "===== STDOUT ====="
-          
-          if (Test-Path $stdoutLog) {
-              Get-Content $stdoutLog
-          }
+          Get-Content $stdoutLog -ErrorAction SilentlyContinue
           
           Write-Host "===== STDERR ====="
+          Get-Content $stderrLog -ErrorAction SilentlyContinue
           
-          if (Test-Path $stderrLog) {
-              Get-Content $stderrLog
-          }
+          Write-Host "===== PORT 8080 ====="
+          Get-NetTCPConnection -LocalPort 8080 -State Listen `
+              -ErrorAction SilentlyContinue
