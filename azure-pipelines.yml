@@ -85,14 +85,31 @@ stages:
           # Stop existing application
           Write-Host "Stopping existing application..."
 
+          # Kill by JAR name in command line
           Get-CimInstance Win32_Process |
               Where-Object {
                   $_.CommandLine -like "*java-devops-demo.jar*"
               } |
               ForEach-Object {
                   Write-Host "Stopping process $($_.ProcessId)"
-                  Stop-Process -Id $_.ProcessId -Force
+                  Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
               }
+
+          # Fallback: kill any process holding port 8080
+          $portPids = netstat -ano |
+              Select-String ":8080\s" |
+              ForEach-Object { ($_ -split '\s+')[-1] } |
+              Sort-Object -Unique
+          foreach ($procId in $portPids) {
+              if ($procId -match '^\d+$' -and $procId -ne '0') {
+                  Write-Host "Releasing port 8080 - stopping PID $procId"
+                  Stop-Process -Id ([int]$procId) -Force -ErrorAction SilentlyContinue
+              }
+          }
+
+          # Wait for the OS to release the port before starting the new instance
+          Write-Host "Waiting for port 8080 to be released..."
+          Start-Sleep -Seconds 5
 
           # Copy artifact
           Write-Host "Copying artifact..."
